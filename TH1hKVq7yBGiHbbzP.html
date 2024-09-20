@@ -1,0 +1,340 @@
+<html><head><base href="https://apis.datos.gob.ar/"><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Análisis de Inflación Argentina con Regresión Lineal</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/regression/2.0.1/regression.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+<style>
+    body {
+        font-family: 'Roboto', sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f0f4f8;
+    }
+    h1, h2 {
+        color: #1a5f7a;
+        text-align: center;
+        margin-bottom: 30px;
+    }
+    h1 {
+        font-size: 2.5em;
+        font-weight: 700;
+        margin-top: 40px;
+    }
+    h2 {
+        font-size: 1.8em;
+        font-weight: 400;
+    }
+    #chartContainer, #tableContainer, #regressionInfo {
+        width: 90%;
+        margin: 30px auto;
+        background-color: #fff;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    #inflationRate {
+        font-size: 36px;
+        font-weight: bold;
+        text-align: center;
+        margin-top: 30px;
+        color: #e63946;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    }
+    #filters {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 30px;
+    }
+    select {
+        padding: 12px 20px;
+        font-size: 16px;
+        margin: 0 10px;
+        border: none;
+        border-radius: 5px;
+        background-color: #f1faee;
+        color: #1d3557;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+    select:hover, select:focus {
+        background-color: #a8dadc;
+        outline: none;
+    }
+    .info-box {
+        background-color: #fff;
+        border-radius: 10px;
+        padding: 20px;
+        margin-top: 30px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .info-box p {
+        margin-bottom: 10px;
+        font-size: 14px;
+        color: #555;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+    th, td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
+    th {
+        background-color: #1a5f7a;
+        color: white;
+    }
+    tr:nth-child(even) {
+        background-color: #f2f2f2;
+    }
+    tr:hover {
+        background-color: #ddd;
+    }
+    #tableContainer {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    #regressionInfo {
+        font-size: 18px;
+        text-align: center;
+    }
+</style>
+</head>
+<body>
+    <h1>Análisis de Inflación en Argentina con Regresión Lineal</h1>
+    
+    <div id="filters">
+        <select id="yearFilter">
+            <option value="all">Todos los años</option>
+        </select>
+        <select id="periodFilter">
+            <option value="monthly">Mensual</option>
+            <option value="quarterly">Trimestral</option>
+            <option value="yearly">Anual</option>
+        </select>
+    </div>
+
+    <div id="chartContainer">
+        <canvas id="ipcChart"></canvas>
+    </div>
+
+    <div id="regressionInfo"></div>
+
+    <div id="tableContainer">
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>IPC</th>
+                    <th>Valor Regresión</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <h2>Tasa de Inflación (último período):</h2>
+    <div id="inflationRate"></div>
+
+    <div class="info-box">
+        <p>Este gráfico muestra la evolución del Índice de Precios al Consumidor (IPC) en Argentina desde 2017, junto con una línea de regresión lineal. El IPC es un indicador que mide la variación promedio de los precios de un conjunto de bienes y servicios que representan el consumo de los hogares en un período determinado.</p>
+        <p>La línea de regresión lineal proporciona una tendencia general de los datos, permitiendo hacer predicciones y analizar la tasa de crecimiento del IPC a lo largo del tiempo.</p>
+        <p>La tasa de inflación mostrada se calcula como el cambio porcentual en el IPC entre el último período disponible y el período inmediatamente anterior.</p>
+        <p>Fuente de datos: Instituto Nacional de Estadística y Censos (INDEC) de Argentina</p>
+    </div>
+
+    <script>
+    let allData = [];
+    let chart;
+
+    async function fetchData() {
+        try {
+            const response = await axios.get('https://apis.datos.gob.ar/series/api/series/?ids=148.3_INIVELNAL_DICI_M_26&format=json');
+            return response.data.data.filter(item => item[0].startsWith('20') && parseInt(item[0].split('-')[0]) >= 2017);
+        } catch (error) {
+            console.error('Error fetching data:', error);
+        }
+    }
+
+    function calculateInflation(data) {
+        const latestMonth = data[data.length - 1];
+        const previousMonth = data[data.length - 2];
+        
+        const latestIPC = parseFloat(latestMonth[1]);
+        const previousIPC = parseFloat(previousMonth[1]);
+
+        const inflationRate = ((latestIPC - previousIPC) / previousIPC) * 100;
+        return inflationRate.toFixed(2);
+    }
+
+    function calculateRegression(data) {
+        const regressionData = data.map((item, index) => [index, parseFloat(item[1])]);
+        return regression.linear(regressionData);
+    }
+
+    function createChart(data) {
+        const labels = data.map(item => item[0]);
+        const values = data.map(item => parseFloat(item[1]));
+
+        const regressionResult = calculateRegression(data);
+        const regressionLine = regressionResult.points.map(point => point[1]);
+
+        const ctx = document.getElementById('ipcChart').getContext('2d');
+        
+        if (chart) {
+            chart.destroy();
+        }
+
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'IPC',
+                    data: values,
+                    borderColor: '#457b9d',
+                    backgroundColor: 'rgba(69, 123, 157, 0.1)',
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#1d3557',
+                    fill: true
+                },
+                {
+                    label: 'Regresión Lineal',
+                    data: regressionLine,
+                    borderColor: '#e63946',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)',
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                        titleColor: '#333',
+                        bodyColor: '#666',
+                        borderColor: '#ccc',
+                        borderWidth: 1,
+                        cornerRadius: 5,
+                        displayColors: false
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index',
+                },
+                animation: {
+                    duration: 2000,
+                    easing: 'easeInOutQuart'
+                }
+            }
+        });
+
+        const inflationRate = calculateInflation(data);
+        document.getElementById('inflationRate').textContent = `${inflationRate}%`;
+
+        // Mostrar información de la regresión
+        const slope = regressionResult.equation[0];
+        const intercept = regressionResult.equation[1];
+        const r2 = regressionResult.r2;
+        document.getElementById('regressionInfo').innerHTML = `
+            <p>Ecuación de regresión: y = ${slope.toFixed(4)}x + ${intercept.toFixed(2)}</p>
+            <p>Coeficiente de determinación (R²): ${r2.toFixed(4)}</p>
+        `;
+
+        return regressionResult;
+    }
+
+    function createTable(data, regressionResult) {
+        const tableBody = document.querySelector('#dataTable tbody');
+        tableBody.innerHTML = '';
+        data.forEach((item, index) => {
+            const row = document.createElement('tr');
+            const dateCell = document.createElement('td');
+            const ipcCell = document.createElement('td');
+            const regressionCell = document.createElement('td');
+            dateCell.textContent = item[0];
+            ipcCell.textContent = parseFloat(item[1]).toFixed(2);
+            regressionCell.textContent = regressionResult.predict(index)[1].toFixed(2);
+            row.appendChild(dateCell);
+            row.appendChild(ipcCell);
+            row.appendChild(regressionCell);
+            tableBody.appendChild(row);
+        });
+    }
+
+    function populateYearFilter(data) {
+        const yearFilter = document.getElementById('yearFilter');
+        yearFilter.innerHTML = '<option value="all">Todos los años</option>';
+        const years = [...new Set(data.map(item => item[0].split('-')[0]))];
+        years.forEach(year => {
+            const option = document.createElement('option');
+            option.value = year;
+            option.textContent = year;
+            yearFilter.appendChild(option);
+        });
+    }
+
+    function applyFilters() {
+        const yearFilter = document.getElementById('yearFilter');
+        const periodFilter = document.getElementById('periodFilter').value;
+
+        let filteredData = allData;
+
+        if (periodFilter === 'yearly') {
+            yearFilter.value = 'all';
+            yearFilter.disabled = true;
+            filteredData = filteredData.filter((_, index) => index % 12 === 0);
+        } else {
+            yearFilter.disabled = false;
+            if (yearFilter.value !== 'all') {
+                filteredData = filteredData.filter(item => item[0].startsWith(yearFilter.value));
+            }
+            if (periodFilter === 'quarterly') {
+                filteredData = filteredData.filter((_, index) => index % 3 === 0);
+            }
+        }
+
+        const regressionResult = createChart(filteredData);
+        createTable(filteredData, regressionResult);
+    }
+
+    async function initializeChart() {
+        allData = await fetchData();
+        populateYearFilter(allData);
+        const regressionResult = createChart(allData);
+        createTable(allData, regressionResult);
+
+        document.getElementById('yearFilter').addEventListener('change', applyFilters);
+        document.getElementById('periodFilter').addEventListener('change', () => {
+            populateYearFilter(allData);
+            applyFilters();
+        });
+    }
+
+    initializeChart();
+    </script>
+</body></html>
