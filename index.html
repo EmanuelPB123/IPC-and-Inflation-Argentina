@@ -132,6 +132,7 @@
                     <th>Fecha</th>
                     <th>IPC</th>
                     <th>Valor Regresión</th>
+                    <th>Tasa de Inflación</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -170,6 +171,17 @@
 
         const inflationRate = ((latestIPC - previousIPC) / previousIPC) * 100;
         return inflationRate.toFixed(2);
+    }
+
+    function calculateInflationRates(data) {
+        const inflationRates = [];
+        for (let i = 1; i < data.length; i++) {
+            const currentIPC = parseFloat(data[i][1]);
+            const previousIPC = parseFloat(data[i - 1][1]);
+            const inflationRate = ((currentIPC - previousIPC) / previousIPC) * 100;
+            inflationRates.push(inflationRate.toFixed(2));
+        }
+        return inflationRates;
     }
 
     function calculateRegression(data) {
@@ -256,7 +268,6 @@
         const inflationRate = calculateInflation(data);
         document.getElementById('inflationRate').textContent = `${inflationRate}%`;
 
-        // Mostrar información de la regresión
         const slope = regressionResult.equation[0];
         const intercept = regressionResult.equation[1];
         const r2 = regressionResult.r2;
@@ -271,17 +282,21 @@
     function createTable(data, regressionResult) {
         const tableBody = document.querySelector('#dataTable tbody');
         tableBody.innerHTML = '';
+        const inflationRates = calculateInflationRates(data);
         data.forEach((item, index) => {
             const row = document.createElement('tr');
             const dateCell = document.createElement('td');
             const ipcCell = document.createElement('td');
             const regressionCell = document.createElement('td');
+            const inflationCell = document.createElement('td');
             dateCell.textContent = item[0];
             ipcCell.textContent = parseFloat(item[1]).toFixed(2);
             regressionCell.textContent = regressionResult.predict(index)[1].toFixed(2);
+            inflationCell.textContent = index === 0 ? '-' : `${inflationRates[index - 1]}%`;
             row.appendChild(dateCell);
             row.appendChild(ipcCell);
             row.appendChild(regressionCell);
+            row.appendChild(inflationCell);
             tableBody.appendChild(row);
         });
     }
@@ -320,6 +335,10 @@
 
         const regressionResult = createChart(filteredData);
         createTable(filteredData, regressionResult);
+
+        const inflationRates = calculateInflationRates(filteredData);
+        const lastInflationRate = inflationRates[inflationRates.length - 1];
+        document.getElementById('inflationRate').textContent = `${lastInflationRate}%`;
     }
 
     async function initializeChart() {
